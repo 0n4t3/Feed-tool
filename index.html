@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- No inline scripts, no remote code: only this app's own files may run.
+       connect-src allows the Nostr relays (wss:) and NIP-05 lookups for bunker addresses (https:). -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' file:; style-src 'self' file:; img-src 'self' file: data:; connect-src wss: ws://localhost:* ws://127.0.0.1:* https:; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Feed Tool</title>
+  <meta name="description" content="A local, browser-only editor for handwritten RSS feeds.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23d9480f'/%3E%3Ccircle cx='9.5' cy='22.5' r='2.6' fill='%23fff'/%3E%3Cpath d='M7 14a11 11 0 0 1 11 11M7 7a18 18 0 0 1 18 18' fill='none' stroke='%23fff' stroke-width='3.2' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <rect width="32" height="32" rx="7" fill="#d9480f"/>
+        <circle cx="9.5" cy="22.5" r="2.6" fill="#fff"/>
+        <path d="M7 14a11 11 0 0 1 11 11M7 7a18 18 0 0 1 18 18" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/>
+      </svg>
+      <h1>Feed Tool</h1>
+    </div>
+
+    <div class="feed-picker">
+      <label class="sr-only" for="feed-select">Feed</label>
+      <select id="feed-select"></select>
+      <button type="button" class="icon-btn" id="feed-add" title="New feed" aria-label="New feed">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12"/></svg>
+      </button>
+    </div>
+
+    <div class="header-actions">
+      <button type="button" class="btn" id="upload-btn" title="Upload an RSS file to edit it">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 13V3M6 7l4-4 4 4"/><path d="M3 13v3h14v-3"/></svg>
+        <span class="btn-label">Upload feed</span>
+      </button>
+      <input type="file" id="upload-file" accept=".xml,.rss,application/rss+xml,application/xml,text/xml" hidden>
+      <button type="button" class="icon-btn" id="undo-btn" title="Undo (Ctrl+Z)" aria-label="Undo">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7 5 3 9l4 4"/><path d="M3 9h9a5 5 0 0 1 0 10h-2"/></svg>
+      </button>
+      <button type="button" class="icon-btn" id="redo-btn" title="Redo (Ctrl+Shift+Z)" aria-label="Redo">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m13 5 4 4-4 4"/><path d="M17 9H8a5 5 0 0 0 0 10h2"/></svg>
+      </button>
+      <button type="button" class="btn sync-btn" id="sync-btn" aria-haspopup="dialog">
+        <span class="sync-dot" id="sync-btn-dot"></span>
+        <span id="sync-btn-label">Sync</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="editor" aria-label="Feed editor">
+      <section class="panel channel" aria-labelledby="channel-heading">
+        <header class="panel-head">
+          <h2 id="channel-heading">Channel</h2>
+          <button type="button" class="btn btn-small btn-danger-quiet" id="feed-delete">Delete feed</button>
+        </header>
+        <label class="field">
+          <span class="field-label">Title</span>
+          <input type="text" id="channel-title" data-channel="title" autocomplete="off">
+        </label>
+        <label class="field">
+          <span class="field-label">Description</span>
+          <input type="text" id="channel-description" data-channel="description" autocomplete="off">
+        </label>
+        <label class="field">
+          <span class="field-label">Link</span>
+          <input type="url" id="channel-link" data-channel="link" autocomplete="off" placeholder="https://">
+        </label>
+        <div class="field-row">
+          <label class="field">
+            <span class="field-label">File name</span>
+            <input type="text" id="feed-filename" data-channel="fileName" autocomplete="off" spellcheck="false">
+          </label>
+          <label class="field field-tz">
+            <span class="field-label" title="Written after the time in new items’ dates, e.g. EST or -0500">Default zone</span>
+            <input type="text" id="feed-timezone" data-channel="timezone" autocomplete="off" spellcheck="false" maxlength="5" placeholder="EST">
+          </label>
+        </div>
+        <p class="panel-note" id="channel-extra" hidden></p>
+      </section>
+
+      <div class="items-toolbar">
+        <h2 id="items-heading">Items <span class="count" id="items-count"></span></h2>
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-small" id="items-sort" title="Order items newest first by date">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3v14M3 14l3 3 3-3M11 5h6M11 9h4.5M11 13h3"/></svg>
+          Sort by date
+        </button>
+        <button type="button" class="btn btn-small" id="items-toggle-all">Expand all</button>
+        <button type="button" class="btn btn-small btn-primary" id="item-add">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12"/></svg>
+          New item
+        </button>
+      </div>
+
+      <div class="items" id="items" role="list" aria-labelledby="items-heading"></div>
+      <p class="empty" id="items-empty" hidden>No items yet. Add one with <strong>New item</strong>, or upload an existing feed.</p>
+    </section>
+
+    <aside class="preview" aria-labelledby="preview-heading">
+      <header class="preview-head">
+        <h2 id="preview-heading"><span id="preview-filename">feed.xml</span> <span class="count" id="preview-size"></span></h2>
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-small" id="copy-xml">Copy</button>
+        <button type="button" class="btn btn-small btn-primary" id="download-xml">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v10M6 9l4 4 4-4"/><path d="M3 13v3h14v-3"/></svg>
+          Download
+        </button>
+      </header>
+      <pre class="xml" id="xml" tabindex="0" aria-label="Generated RSS"></pre>
+    </aside>
+  </main>
+
+  <div class="drop-overlay" id="drop-overlay" hidden><p>Drop an RSS file to upload it</p></div>
+
+  <dialog class="dialog dialog-wide" id="sync-dialog" aria-labelledby="sync-title">
+    <div class="dialog-body">
+      <header class="dialog-header">
+        <h2 id="sync-title">Sync</h2>
+        <button type="button" class="icon-btn dialog-close" data-close aria-label="Close">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg>
+        </button>
+      </header>
+
+      <p class="form-error" id="sync-error" role="alert" hidden></p>
+
+      <div id="sync-signed-out">
+        <section class="panel">
+          <h3 class="panel-title">Generate Sync Key</h3>
+          <p class="panel-text">New to sync? Create a key here, then enter the same key on your other devices.</p>
+          <button type="button" class="btn" id="sync-generate">Generate sync key</button>
+          <div class="generated-key" id="sync-generated" hidden>
+            <p class="panel-warning">This is your sync key. Save it somewhere safe, like a password manager. If you lose it, your synced data can't be recovered.</p>
+            <div class="key-field">
+              <input type="text" id="sync-generated-key" readonly spellcheck="false" aria-label="Your new sync key">
+              <button type="button" class="btn" data-copy="sync-generated-key">Copy</button>
+            </div>
+            <button type="button" class="btn btn-primary" id="sync-generated-use">I've saved it, start syncing</button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h3 class="panel-title">Enter Sync Key</h3>
+          <p class="panel-text">Already have a sync key? Enter it to sync this device.</p>
+          <form class="key-field" id="sync-key-form">
+            <input type="password" id="sync-key-input" placeholder="nsec1…" autocomplete="off" spellcheck="false" aria-label="Sync key">
+            <button type="submit" class="btn">Use key</button>
+          </form>
+        </section>
+
+        <section class="panel">
+          <h3 class="panel-title">Sign in with Nostr</h3>
+          <div class="signin-options">
+            <button type="button" class="btn" id="sync-extension">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 6.5h3a2 2 0 1 1 4 0h3v3a2 2 0 1 1 0 4v3H4z"/></svg>
+              Browser extension
+            </button>
+            <span class="or">or</span>
+            <form class="key-field" id="sync-bunker-form">
+              <input type="text" id="sync-bunker-input" placeholder="bunker://…" autocomplete="off" spellcheck="false" aria-label="nsec bunker address">
+              <button type="submit" class="btn">Connect</button>
+            </form>
+          </div>
+        </section>
+      </div>
+
+      <div id="sync-signed-in" hidden>
+        <section class="panel">
+          <div class="sync-state">
+            <span class="sync-dot" id="sync-dot"></span>
+            <div>
+              <div class="sync-state-title" id="sync-state-title">Synced</div>
+              <div class="panel-text" id="sync-state-detail"></div>
+            </div>
+          </div>
+          <dl class="sync-facts">
+            <dt>Signed in with</dt><dd id="sync-method"></dd>
+            <dt>Account</dt><dd><code id="sync-npub"></code></dd>
+          </dl>
+          <div class="button-row">
+            <button type="button" class="btn btn-primary" id="sync-now">Sync now</button>
+            <button type="button" class="btn" id="sync-show-key">Show sync key</button>
+            <button type="button" class="btn" id="sync-signout">Stop syncing</button>
+          </div>
+          <div class="key-field" id="sync-key-reveal" hidden>
+            <input type="text" id="sync-key-value" readonly spellcheck="false" aria-label="Your sync key">
+            <button type="button" class="btn" data-copy="sync-key-value">Copy</button>
+          </div>
+        </section>
+        <details class="panel relays">
+          <summary>Relays</summary>
+          <p class="panel-text">Encrypted data is stored on these Nostr relays, one address per line.</p>
+          <textarea id="sync-relays" rows="4" spellcheck="false" aria-label="Relays"></textarea>
+          <div class="button-row button-row-end">
+            <button type="button" class="btn" id="sync-relays-reset">Use defaults</button>
+            <button type="button" class="btn" id="sync-relays-save">Save relays</button>
+          </div>
+        </details>
+        <details class="panel relays">
+          <summary>Delete synced data</summary>
+          <p class="panel-text">Erases the synced copy of your feeds from the relays and stops syncing on this device. Feeds in this browser are kept. Other devices that are still signed in will upload their copy again the next time they sync.</p>
+          <button type="button" class="btn btn-danger-outline" id="sync-delete">Delete synced data</button>
+        </details>
+      </div>
+
+      <section class="about-nostr">
+        <h3>The heck is a Nostr?</h3>
+        <p>This app uses the Nostr protocol for optional synchronization. If you'd like to read more about the protocol, you can do so <a href="https://nostr.org/" target="_blank" rel="noopener noreferrer">here</a>. Otherwise, you can just ignore that fact. Your feeds are stored as NIP-78 application data, End-To-End encrypted, so nobody can read them unless they have the sync key. If you ever lose it, you'll be unable to access your synced data; and if you give it to someone else, they'll be able to view and edit your feeds just like you. There's no server of mine involved, so there is no way to reset or change your sync key other than generating a new one and uploading your feeds to it again.</p>
+      </section>
+    </div>
+  </dialog>
+
+  <dialog class="dialog dialog-small" id="confirm-dialog" aria-labelledby="confirm-title">
+    <form method="dialog">
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-message"></p>
+      <footer class="dialog-footer">
+        <span class="spacer"></span>
+        <button type="submit" class="btn" value="cancel">Cancel</button>
+        <button type="submit" class="btn btn-danger" value="confirm" id="confirm-ok">Delete</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" hidden>
+    <span id="toast-text"></span>
+    <button type="button" class="btn btn-small" id="toast-action" hidden></button>
+  </div>
+
+  <footer class="app-footer">
+    Everything stays in this browser unless you turn on sync.
+    <a href="https://github.com/0n4t3/Feed-tool" target="_blank" rel="noopener noreferrer">Source</a>
+  </footer>
+
+  <script src="vendor/nostr-tools.min.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/rss.js"></script>
+  <script src="js/sync.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
