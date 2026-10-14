@@ -10,7 +10,8 @@ or serve the folder with any static file server, e.g. `python3 -m http.server`.
 - **Edit a list of items.** Each item has a title, link, description and date.
   Add items with **New item** (dated now) and delete them (with undo). Items
   are always listed, and written to the feed, newest first by date; to move
-  one, change its date. Items whose date couldn't be read go last.
+  one, change its date. Items without a date (unfinished drafts, or uploaded
+  dates that couldn't be read) go at the top.
 - **Channel details:** title, description and link, plus the file name used for
   downloads and the default time zone label for new items.
 - **Live preview** of the generated XML, with **Copy** and **Download**.

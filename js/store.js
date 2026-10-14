@@ -29,7 +29,8 @@
  *   }
  *
  * Items are always kept newest first by date (the order they're written to
- * the file); items without a readable date go last. Each
+ * the file). Items without a date go first: they're usually drafts that are
+ * still being written. Each
  * feed's `updatedAt` changes on every edit inside it. Sync (js/sync.js)
  * merges whole feeds by comparing these timestamps.
  */
@@ -133,15 +134,15 @@
 
   /**
    * Newest first by date, as written (zone labels aren't converted). Items
-   * without a date go last; ties keep their current relative order.
+   * without a date go first; ties keep their current relative order.
    */
   function sortByDate(items) {
     var pos = new Map();
     items.forEach(function (it, i) { pos.set(it, i); });
     items.sort(function (a, b) {
       if (a.date !== b.date) {
-        if (!a.date) return 1;
-        if (!b.date) return -1;
+        if (!a.date) return -1;
+        if (!b.date) return 1;
         return a.date < b.date ? 1 : -1;
       }
       return pos.get(a) - pos.get(b);
