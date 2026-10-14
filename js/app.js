@@ -32,8 +32,6 @@
 
   var SVG_NS = 'http://www.w3.org/2000/svg';
   var ICONS = {
-    up: ['M10 15V5M5.5 9.5 10 5l4.5 4.5'],
-    down: ['M10 5v10M5.5 10.5 10 15l4.5-4.5'],
     trash: ['M4 6h12M8 6V4h4v2M5.5 6l.8 10h7.4l.8-10'],
     chevron: ['m7 5 5 5-5 5'],
     clock: ['M10 6v4l2.5 2', 'M10 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14z']
@@ -123,7 +121,6 @@
     var open = expanded.has(item.id);
     var bodyId = 'item-body-' + item.id;
     var head = headText(item);
-    var last = index === feed.items.length - 1;
 
     var toggle = h('button', {
       type: 'button', class: 'item-toggle', 'data-action': 'toggle',
@@ -138,8 +135,6 @@
     ]);
 
     var actions = h('div', { class: 'item-actions' }, [
-      h('button', { type: 'button', class: 'icon-btn', 'data-action': 'up', title: 'Move up', 'aria-label': 'Move up', disabled: index === 0 }, [icon('up')]),
-      h('button', { type: 'button', class: 'icon-btn', 'data-action': 'down', title: 'Move down', 'aria-label': 'Move down', disabled: last }, [icon('down')]),
       h('button', { type: 'button', class: 'icon-btn icon-btn-danger', 'data-action': 'delete', title: 'Delete item', 'aria-label': 'Delete item' }, [icon('trash')])
     ]);
 
@@ -190,15 +185,12 @@
     var ids = new Set(feed.items.map(function (it) { return it.id; }));
     expanded.forEach(function (id) { if (!ids.has(id)) expanded.delete(id); });
 
+    reorderPending = false;
     itemsEl.textContent = '';
-    feed.items.forEach(function (item, i) {
-      if (i > 0) itemsEl.appendChild(h('div', { class: 'divider', 'aria-hidden': 'true', text: '<!-- entry divider -->' }));
-      itemsEl.appendChild(itemCard(feed, item, i));
-    });
+    feed.items.forEach(function (item, i) { itemsEl.appendChild(itemCard(feed, item, i)); });
     $('items-empty').hidden = feed.items.length > 0;
     $('items-count').textContent = feed.items.length ? String(feed.items.length) : '';
     $('items-toggle-all').hidden = !feed.items.length;
-    $('items-sort').hidden = feed.items.length < 2;
     $('items-toggle-all').textContent = feed.items.length && expanded.size === feed.items.length ? 'Collapse all' : 'Expand all';
 
     if (keep && keep.id && keep.sel) {
@@ -206,6 +198,7 @@
       var target = cardEl && cardEl.querySelector(keep.sel);
       if (target && !target.disabled) {
         target.focus();
+        target.scrollIntoView({ block: 'nearest' });
         try { if (typeof keep.start === 'number') target.setSelectionRange(keep.start, keep.end); } catch (err) { /* not a text field */ }
       } else if (cardEl) {
         cardEl.querySelector('[data-action="toggle"]').focus();
@@ -321,19 +314,11 @@
 
   $('item-add').addEventListener('click', function () {
     var feed = store.activeFeed();
-    var id = store.addItem(feed.id, { date: rss.nowLocal(), tz: feed.timezone }, 0);
+    var id = store.addItem(feed.id, { date: rss.nowLocal(), tz: feed.timezone });
     expanded.add(id);
     render();
     var input = itemsEl.querySelector('[data-item-id="' + id + '"] [data-field="title"]');
     if (input) input.focus();
-  });
-
-  $('items-sort').addEventListener('click', function () {
-    var feed = store.activeFeed();
-    var before = feed.items.map(function (it) { return it.id; }).join();
-    store.sortItems(feed.id);
-    var after = store.activeFeed().items.map(function (it) { return it.id; }).join();
-    toast(before === after ? 'Items are already in date order' : 'Sorted newest first');
   });
 
   $('items-toggle-all').addEventListener('click', function () {
@@ -353,8 +338,6 @@
     if (action === 'toggle') {
       if (expanded.has(id)) expanded.delete(id); else expanded.add(id);
       render();
-    } else if (action === 'up' || action === 'down') {
-      store.moveItem(feed.id, id, action === 'up' ? -1 : 1);
     } else if (action === 'delete') {
       var item = feed.items.filter(function (it) { return it.id === id; })[0];
       store.deleteItem(feed.id, id);
@@ -376,6 +359,31 @@
   itemsEl.addEventListener('change', function (e) {
     if (e.target.getAttribute('data-field') === 'tz') render();
   });
+
+  // Items are always shown newest first. A card whose date was edited moves to
+  // its new place once the date field is left, not while it's being typed in.
+  // If that happens during a click, wait for the click to land first.
+  var reorderPending = false;
+  var pointerDown = false;
+
+  function cardsOutOfOrder() {
+    var shown = Array.prototype.map.call(itemsEl.querySelectorAll('[data-item-id]'), function (el) { return el.getAttribute('data-item-id'); });
+    return shown.join() !== store.activeFeed().items.map(function (it) { return it.id; }).join();
+  }
+  function applyReorder() {
+    if (reorderPending && !pointerDown) render();
+  }
+
+  itemsEl.addEventListener('focusout', function (e) {
+    if (e.target.getAttribute('data-field') !== 'date' || !cardsOutOfOrder()) return;
+    reorderPending = true;
+    setTimeout(applyReorder, 0);
+  });
+  document.addEventListener('pointerdown', function () { pointerDown = true; }, true);
+  document.addEventListener('pointerup', function () {
+    pointerDown = false;
+    if (reorderPending) setTimeout(applyReorder, 0);
+  }, true);
 
   // ---------------------------------------------------------------------------
   // Upload, copy, download

@@ -84,12 +84,8 @@
       </section>
 
       <div class="items-toolbar">
-        <h2 id="items-heading">Items <span class="count" id="items-count"></span></h2>
+        <h2 id="items-heading" title="Shown newest first, in the order they’re written to the feed">Items <span class="count" id="items-count"></span></h2>
         <span class="spacer"></span>
-        <button type="button" class="btn btn-small" id="items-sort" title="Order items newest first by date">
-          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3v14M3 14l3 3 3-3M11 5h6M11 9h4.5M11 13h3"/></svg>
-          Sort by date
-        </button>
         <button type="button" class="btn btn-small" id="items-toggle-all">Expand all</button>
         <button type="button" class="btn btn-small btn-primary" id="item-add">
           <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12"/></svg>
@@ -207,10 +203,10 @@
         </details>
       </div>
 
-      <section class="about-nostr">
-        <h3>The heck is a Nostr?</h3>
-        <p>This app uses the Nostr protocol for optional synchronization. If you'd like to read more about the protocol, you can do so <a href="https://nostr.org/" target="_blank" rel="noopener noreferrer">here</a>. Otherwise, you can just ignore that fact. Your feeds are stored as NIP-78 application data, End-To-End encrypted, so nobody can read them unless they have the sync key. If you ever lose it, you'll be unable to access your synced data; and if you give it to someone else, they'll be able to view and edit your feeds just like you. There's no server of mine involved, so there is no way to reset or change your sync key other than generating a new one and uploading your feeds to it again.</p>
-      </section>
+      <details class="panel relays">
+        <summary>The heck is a Nostr?</summary>
+        <p class="panel-text">This app uses the Nostr protocol for optional synchronization. If you'd like to read more about the protocol, you can do so <a href="https://nostr.org/" target="_blank" rel="noopener noreferrer">here</a>. Otherwise, you can just ignore that fact. Your feeds are stored as NIP-78 application data, End-To-End encrypted, so nobody can read them unless they have the sync key. If you ever lose it, you'll be unable to access your synced data; and if you give it to someone else, they'll be able to view and edit your feeds just like you. There's no server of mine involved, so there is no way to reset or change your sync key other than generating a new one and uploading your feeds to it again.</p>
+      </details>
     </div>
   </dialog>
 

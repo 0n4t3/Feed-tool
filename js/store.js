@@ -28,7 +28,9 @@
  *     }]
  *   }
  *
- * Items are kept in feed order (newest first, as written to the file). Each
+ * Items are always kept newest first by date (the order they're written to
+ * the file). Items without a date go first: they're usually drafts that are
+ * still being written. Each
  * feed's `updatedAt` changes on every edit inside it. Sync (js/sync.js)
  * merges whole feeds by comparing these timestamps.
  */
@@ -110,7 +112,7 @@
         link: str(ch.link, 4000),
         extra: strList(ch.extra)
       },
-      items: (Array.isArray(fields.items) ? fields.items : []).map(function (it) { return createItem(it, tz); })
+      items: sortByDate((Array.isArray(fields.items) ? fields.items : []).map(function (it) { return createItem(it, tz); }))
     };
   }
 
@@ -128,6 +130,24 @@
   function createDatabase() {
     var feed = createFeed();
     return { schemaVersion: SCHEMA_VERSION, activeFeedId: feed.id, feedOrderUpdatedAt: now(), deletedFeeds: {}, feeds: [feed] };
+  }
+
+  /**
+   * Newest first by date, as written (zone labels aren't converted). Items
+   * without a date go first; ties keep their current relative order.
+   */
+  function sortByDate(items) {
+    var pos = new Map();
+    items.forEach(function (it, i) { pos.set(it, i); });
+    items.sort(function (a, b) {
+      if (a.date !== b.date) {
+        if (!a.date) return -1;
+        if (!b.date) return 1;
+        return a.date < b.date ? 1 : -1;
+      }
+      return pos.get(a) - pos.get(b);
+    });
+    return items;
   }
 
   /** Validate and repair a database from storage, sync, or anywhere else untrusted. */
@@ -173,7 +193,7 @@
           link: str(ch.link, 4000),
           extra: strList(ch.extra)
         },
-        items: items
+        items: sortByDate(items)
       });
     });
     if (!out.feeds.length) out.feeds.push(createFeed());
@@ -288,12 +308,11 @@
       if (!feed) return undefined;
       var before = JSON.stringify(feed);
       var result = fn(feed, d);
+      sortByDate(feed.items);
       if (JSON.stringify(feed) !== before) feed.updatedAt = now();
       return result;
     }, options);
   }
-
-  function dateValue(item) { return item.date || ''; }
 
   var Store = {
     DEFAULT_TZ: DEFAULT_TZ,
@@ -387,11 +406,10 @@
 
     // --- items ---
 
-    addItem: function (feedId, fields, index) {
+    addItem: function (feedId, fields) {
       return onFeed(feedId, function (feed) {
         var item = createItem(fields, feed.timezone);
-        var at = typeof index === 'number' ? Math.max(0, Math.min(index, feed.items.length)) : 0;
-        feed.items.splice(at, 0, item);
+        feed.items.unshift(item);
         return item.id;
       });
     },
@@ -416,32 +434,6 @@
       onFeed(feedId, function (feed) {
         var i = itemIndex(feed, itemId);
         if (i >= 0) feed.items.splice(i, 1);
-      });
-    },
-
-    moveItem: function (feedId, itemId, delta) {
-      onFeed(feedId, function (feed) {
-        var i = itemIndex(feed, itemId);
-        var j = i + delta;
-        if (i < 0 || j < 0 || j >= feed.items.length) return;
-        var item = feed.items.splice(i, 1)[0];
-        feed.items.splice(j, 0, item);
-      });
-    },
-
-    /** Newest first. Items without a date keep their relative order, at the end. */
-    sortItems: function (feedId) {
-      onFeed(feedId, function (feed) {
-        var pos = new Map();
-        feed.items.forEach(function (it, i) { pos.set(it.id, i); });
-        feed.items.sort(function (a, b) {
-          var da = dateValue(a);
-          var dbv = dateValue(b);
-          if (da && dbv && da !== dbv) return da < dbv ? 1 : -1;
-          if (da && !dbv) return -1;
-          if (!da && dbv) return 1;
-          return pos.get(a.id) - pos.get(b.id);
-        });
       });
     },
 
